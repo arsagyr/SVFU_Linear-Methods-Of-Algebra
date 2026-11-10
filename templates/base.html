@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Лабораторные работы{% endblock %}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Arial, sans-serif; }
+
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        header { background: #2c3e50; color: #fff; padding: 30px; text-align: center; }
+        header h1 { font-size: 28px; font-weight: 600; }
+        header p { margin-top: 8px; color: #bdc3c7; }
+
+        /* Вкладки */
+        .tabs { display: flex; flex-wrap: wrap; background: #34495e; border-bottom: 3px solid #3498db; }
+        .tab {
+            padding: 15px 22px; color: #ecf0f1; text-decoration: none;
+            font-size: 14px; font-weight: 500;
+            border-right: 1px solid #2c3e50;
+            transition: background 0.3s, color 0.3s;
+        }
+        .tab:hover { background: #3d566e; }
+        .tab.active { background: #3498db; color: #fff; }
+
+        /* Контент */
+        .content { padding: 40px; min-height: 400px; }
+        .content h2 { color: #2c3e50; margin-bottom: 10px; font-size: 24px; }
+
+        .topic {
+            display: inline-block; background: #e8f4fd; color: #3498db;
+            padding: 6px 14px; border-radius: 20px; font-size: 13px;
+            font-weight: 600; margin-bottom: 20px;
+        }
+
+        .description { color: #555; line-height: 1.6; margin-bottom: 22px; font-size: 15px; }
+
+        .tasks-title { color: #2c3e50; font-size: 17px; margin-bottom: 12px; font-weight: 600; }
+        .tasks { list-style: none; padding: 0; margin-bottom: 30px; }
+        .tasks li {
+            background: #f8f9fa; border-left: 4px solid #3498db;
+            padding: 12px 18px; margin-bottom: 10px; border-radius: 6px;
+        }
+
+        /* Ввод / вывод */
+        .io-block {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 25px;
+            margin-top: 10px;
+        }
+        @media (max-width: 800px) { .io-block { grid-template-columns: 1fr; } }
+
+        .io-panel {
+            background: #f8f9fa;
+            border: 1px solid #e1e8ed;
+            border-radius: 10px;
+            padding: 20px;
+        }
+
+        .io-panel h3 {
+            color: #2c3e50;
+            font-size: 16px;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #3498db;
+        }
+
+        .form-group { margin-bottom: 15px; }
+        .form-group label {
+            display: block; font-size: 13px; color: #555;
+            margin-bottom: 6px; font-weight: 600;
+        }
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%; padding: 10px 12px;
+            border: 1px solid #ccd6dd; border-radius: 6px;
+            font-size: 14px; font-family: inherit; background: #fff;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none; border-color: #3498db;
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.15);
+        }
+        .form-group textarea { resize: vertical; min-height: 90px; }
+
+        .btn-run {
+            width: 100%;
+            background: #3498db;
+            color: #fff;
+            border: none;
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+        }
+        .btn-run:hover { background: #2980b9; }
+        .btn-run:active { transform: scale(0.98); }
+        .btn-run:disabled { background: #95a5a6; cursor: not-allowed; }
+
+        /* Вывод */
+        .output {
+            background: #1e2a35;
+            color: #dfe6e9;
+            padding: 16px;
+            border-radius: 8px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+            word-break: break-word;
+            min-height: 200px;
+            max-height: 400px;
+            overflow-y: auto;
+            line-height: 1.55;
+        }
+        .output.error { background: #4a1e1e; color: #ffb3b3; }
+        .output .placeholder { color: #7f8c8d; font-style: italic; }
+
+        /* Заглушка */
+        .empty { text-align: center; color: #888; padding: 60px 20px; }
+        .empty h2 { color: #3498db; margin-bottom: 15px; }
+
+        footer { background: #ecf0f1; text-align: center; padding: 15px; color: #7f8c8d; font-size: 13px; }
+            /* ---------- Визуализация результатов ---------- */
+        #output { min-height: 200px; }
+        #output .placeholder { color: #95a5a6; font-style: italic; }
+
+        .viz-container { display: flex; flex-direction: column; gap: 18px; }
+        .viz-header {
+            color: #2c3e50; font-size: 16px; font-weight: 600;
+            border-bottom: 2px solid #3498db; padding-bottom: 8px;
+        }
+        .viz-block {
+            background: #fff; border: 1px solid #e1e8ed;
+            border-radius: 8px; padding: 14px;
+        }
+        .viz-title {
+            color: #34495e; font-size: 14px; font-weight: 600;
+            margin-bottom: 10px;
+        }
+        .viz-summary {
+            background: #e8f4fd; color: #2980b9;
+            padding: 10px 14px; border-radius: 6px; font-size: 13px;
+        }
+
+        /* Таблицы */
+        .viz-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .viz-table th, .viz-table td {
+            border: 1px solid #e1e8ed; padding: 8px 10px; text-align: left;
+        }
+        .viz-table th { background: #34495e; color: #fff; font-weight: 600; }
+        .viz-table tbody tr:nth-child(even) { background: #f8f9fa; }
+        .viz-table tbody tr:hover { background: #eaf4fd; }
+
+        /* Матрицы */
+        .matrix-box {
+            display: inline-block; margin: 8px 12px 8px 0;
+            padding: 12px 16px; border-radius: 8px;
+            background: #f8f9fa; border: 2px solid #dfe6e9;
+            vertical-align: top;
+        }
+        .matrix-hl { border-color: #3498db; background: #e8f4fd; }
+        .matrix-label {
+            font-weight: 600; color: #2c3e50; margin-bottom: 8px; font-size: 14px;
+        }
+        .matrix-table { border-collapse: separate; border-spacing: 4px; }
+        .matrix-table td {
+            background: #fff; border: 1px solid #ccd6dd;
+            padding: 8px 14px; text-align: center;
+            font-family: 'Consolas', monospace; font-size: 14px;
+            border-radius: 4px; min-width: 40px;
+        }
+
+        /* Списки */
+        .viz-list { list-style: none; padding: 0; font-size: 13px; }
+        .viz-list li {
+            padding: 8px 12px; margin-bottom: 6px;
+            background: #f8f9fa; border-left: 3px solid #3498db;
+            border-radius: 4px;
+        }
+
+        /* Текст / JSON */
+        .viz-pre {
+            background: #1e2a35; color: #dfe6e9;
+            padding: 14px; border-radius: 6px;
+            font-family: 'Consolas', monospace; font-size: 13px;
+            white-space: pre-wrap; overflow-x: auto; max-height: 400px;
+            overflow-y: auto;
+        }
+        .viz-hidden { display: none; }
+
+        /* Ошибки */
+        #output.error .viz-error,
+        .viz-error {
+            background: #fdecea; color: #c0392b;
+            padding: 12px 16px; border-radius: 6px;
+            font-weight: 600; border-left: 4px solid #e74c3c;
+        }
+
+        .viz-warn {
+            margin-top: 8px; padding: 8px 12px;
+            background: #fff8e1; color: #b7791f;
+            border-radius: 6px; font-size: 13px;
+        }
+
+        /* Кнопка сырого JSON */
+        .btn-raw {
+            align-self: flex-start;
+            background: #ecf0f1; color: #34495e;
+            border: 1px solid #ccd6dd; padding: 8px 14px;
+            border-radius: 6px; cursor: pointer; font-size: 13px;
+            transition: background 0.2s;
+        }
+        .btn-raw:hover { background: #dde4e8; }
+    
+    
+    
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🧪 Лабораторные работы</h1>
+            <p>Выберите вкладку, введите данные — получите JSON-результат</p>
+        </header>
+
+        <nav class="tabs">
+            {% for lab in labs %}
+                <a href="{{ url_for('lab_view', lab_id=lab.id) }}"
+                   class="tab {% if current == lab.id %}active{% endif %}">
+                    {{ lab.title }}
+                </a>
+            {% endfor %}
+        </nav>
+
+        <main class="content">
+            {% block content %}{% endblock %}
+        </main>
+
+        <footer>© 2025 — Сайт лабораторных работ | Flask</footer>
+    </div>
+
+    {% block scripts %}{% endblock %}
+</body>
+</html>

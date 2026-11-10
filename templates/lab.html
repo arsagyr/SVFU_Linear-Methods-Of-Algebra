@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+
+{% block title %}{{ current_lab.title }} — Лабораторные работы{% endblock %}
+
+{% block content %}
+<h2>{{ current_lab.title }}</h2>
+<span class="topic">{{ current_lab.topic }}</span>
+<p class="description">{{ current_lab.description }}</p>
+
+<h3 class="tasks-title">📋 Задания:</h3>
+<ul class="tasks">
+    {% for task in current_lab.tasks %}<li>{{ task }}</li>{% endfor %}
+</ul>
+
+<div class="io-block">
+    <!-- ВВОД -->
+    <div class="io-panel">
+        <h3>⌨️ Ввод данных</h3>
+        <form id="lab-form">
+            {% for inp in current_lab.inputs %}
+                <div class="form-group">
+                    <label for="f-{{ inp.name }}">{{ inp.label }}</label>
+                    {% if inp.type == "textarea" %}
+                        <textarea id="f-{{ inp.name }}" name="{{ inp.name }}" rows="4">{{ inp.default }}</textarea>
+                    {% elif inp.type == "select" %}
+                        <select id="f-{{ inp.name }}" name="{{ inp.name }}">
+                            {% for opt in inp.options %}
+                                <option value="{{ opt }}" {% if inp.default == opt %}selected{% endif %}>{{ opt }}</option>
+                            {% endfor %}
+                        </select>
+                    {% else %}
+                        <input id="f-{{ inp.name }}" name="{{ inp.name }}"
+                               type="{{ inp.type }}" value="{{ inp.default }}"
+                               {% if inp.step %}step="{{ inp.step }}"{% endif %}
+                               {% if inp.min is defined %}min="{{ inp.min }}"{% endif %}
+                               {% if inp.max is defined %}max="{{ inp.max }}"{% endif %}
+                               required>
+                    {% endif %}
+                </div>
+            {% endfor %}
+            <button type="submit" class="btn-run" id="run-btn">▶ Выполнить</button>
+        </form>
+    </div>
+
+    <!-- ВЫВОД -->
+    <div class="io-panel">
+        <h3>📤 Вывод</h3>
+        <div id="output">
+            <span class="placeholder">Здесь появится результат…</span>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+
+{% block scripts %}
+<script>
+const OUTPUT_TYPE = {{ (current_lab.output or {}).get('type', 'json') | tojson }};
+const OUTPUT_TITLE = {{ (current_lab.output or {}).get('title', '') | tojson }};
+const form = document.getElementById('lab-form');
+const output = document.getElementById('output');
+const btn = document.getElementById('run-btn');
+const runUrl = "{{ url_for('lab_run', lab_id=current_lab.id) }}";
+
+/* ---------- Рендер-функции ---------- */
+
+function el(tag, attrs = {}, children = []) {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+        if (k === 'class') e.className = v;
+        else if (k === 'style') e.style.cssText = v;
+        else e.setAttribute(k, v);
+    }
+    for (const c of children) {
+        if (typeof c === 'string') e.appendChild(document.createTextNode(c));
+        else if (c) e.appendChild(c);
+    }
+    return e;
+}
+
+function renderTable(block) {
+    const wrap = el('div', { class: 'viz-block' });
+    if (block.title) wrap.appendChild(el('h4', { class: 'viz-title' }, [block.title]));
+
+    const table = el('table', { class: 'viz-table' });
+    const thead = el('thead');
+    const headRow = el('tr');
+    (block.columns || []).forEach(c => headRow.appendChild(el('th', {}, [c.label])));
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+
+    const tbody = el('tbody');
+    (block.rows || []).forEach(row => {
+        const tr = el('tr');
+        (block.columns || []).forEach(c => {
+            const val = row[c.key];
+            tr.appendChild(el('td', {}, [String(val ?? '')]));
+        });
+        tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+
+    if (block.warnings && block.warnings.length) {
+        wrap.appendChild(el('div', { class: 'viz-warn' }, ['⚠ ' + block.warnings.join('; ')]));
+    }
+    return wrap;
+}
+
+function renderChart(block) {
+    const wrap = el('div', { class: 'viz-block' });
+    if (block.title) wrap.appendChild(el('h4', { class: 'viz-title' }, [block.title]));
+
+    const canvas = el('canvas');
+    wrap.appendChild(canvas);
+
+    requestAnimationFrame(() => {
+        new Chart(canvas, {
+            type: block.chart_type || 'bar',
+            data: {
+                labels: block.labels,
+                datasets: block.datasets,
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: block.datasets.length > 1 } },
+                scales: block.chart_type === 'pie' ? {} : { y: { beginAtZero: true } },
+            },
+        });
+        canvas.parentElement.style.height = '320px';
+    });
+    return wrap;
+}
+
+function renderMatrix(block) {
+    const wrap = el('div', { class: 'viz-block' });
+    (block.matrices || []).forEach(m => {
+        const box = el('div', { class: 'matrix-box' + (m.highlight ? ' matrix-hl' : '') });
+        box.appendChild(el('div', { class: 'matrix-label' }, [m.label]));
+        const table = el('table', { class: 'matrix-table' });
+        m.data.forEach(row => {
+            const tr = el('tr');
+            row.forEach(v => tr.appendChild(el('td', {}, [String(v)])));
+            table.appendChild(tr);
+        });
+        box.appendChild(table);
+        wrap.appendChild(box);
+    });
+    return wrap;
+}
+
+function renderList(block) {
+    const wrap = el('div', { class: 'viz-block' });
+    if (block.title) wrap.appendChild(el('h4', { class: 'viz-title' }, [block.title]));
+    const ul = el('ul', { class: 'viz-list' });
+    (block.items || []).forEach(it => ul.appendChild(el('li', {}, [String(it)])));
+    wrap.appendChild(ul);
+    return wrap;
+}
+
+function renderText(block) {
+    const wrap = el('div', { class: 'viz-block' });
+    if (block.title) wrap.appendChild(el('h4', { class: 'viz-title' }, [block.title]));
+    wrap.appendChild(el('pre', { class: 'viz-pre' }, [block.text || '']));
+    return wrap;
+}
+
+function renderJson(data) {
+    const pre = el('pre', { class: 'viz-pre' }, [JSON.stringify(data, null, 2)]);
+    return pre;
+}
+
+/* ---------- Главный роутер по типу ---------- */
+
+function renderResult(data) {
+    output.innerHTML = '';
+    output.classList.remove('error');
+
+    if (!data.ok) {
+        output.classList.add('error');
+        output.appendChild(el('div', { class: 'viz-error' }, ['❌ ' + (data.error || 'Ошибка')]));
+        output.appendChild(renderJson(data));
+        return;
+    }
+
+    const box = el('div', { class: 'viz-container' });
+    if (OUTPUT_TITLE) box.appendChild(el('h3', { class: 'viz-header' }, [OUTPUT_TITLE]));
+
+    if (OUTPUT_TYPE === 'mixed' && Array.isArray(data.blocks)) {
+        data.blocks.forEach(b => {
+            if (b.type === 'table') box.appendChild(renderTable(b));
+            else if (b.type === 'chart') box.appendChild(renderChart(b));
+            else if (b.type === 'matrix') box.appendChild(renderMatrix(b));
+            else if (b.type === 'list') box.appendChild(renderList(b));
+            else if (b.type === 'text') box.appendChild(renderText(b));
+        });
+        if (data.summary) box.appendChild(el('div', { class: 'viz-summary' }, [data.summary]));
+    } else if (OUTPUT_TYPE === 'table') {
+        box.appendChild(renderTable(data));
+    } else if (OUTPUT_TYPE === 'chart') {
+        box.appendChild(renderChart(data));
+        if (data.summary) box.appendChild(el('div', { class: 'viz-summary' }, [data.summary]));
+    } else if (OUTPUT_TYPE === 'matrix') {
+        box.appendChild(renderMatrix(data));
+    } else if (OUTPUT_TYPE === 'list') {
+        box.appendChild(renderList(data));
+    } else if (OUTPUT_TYPE === 'text') {
+        box.appendChild(renderText(data));
+    } else {
+        // json — как есть, плюс исходные данные
+        box.appendChild(renderJson(data));
+    }
+
+    // Кнопка "показать сырой JSON"
+    const rawBtn = el('button', { class: 'btn-raw', type: 'button' }, ['{} Показать JSON']);
+    const rawPre = el('pre', { class: 'viz-pre viz-hidden' }, [JSON.stringify(data, null, 2)]);
+    rawBtn.addEventListener('click', () => rawPre.classList.toggle('viz-hidden'));
+    box.appendChild(rawBtn);
+    box.appendChild(rawPre);
+
+    output.appendChild(box);
+}
+
+/* ---------- Отправка формы ---------- */
+form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    btn.disabled = true;
+    btn.textContent = '⏳…';
+    output.innerHTML = '<span class="placeholder">Запрос…</span>';
+
+    try {
+        const resp = await fetch(runUrl, { method: 'POST', body: new FormData(form) });
+        const data = await resp.json();
+        renderResult(data);
+    } catch (err) {
+        output.classList.add('error');
+        output.innerHTML = '';
+        output.appendChild(el('div', { class: 'viz-error' }, ['Ошибка запроса: ' + err.message]));
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '▶ Выполнить';
+    }
+});
+</script>
+{% endblock %}
