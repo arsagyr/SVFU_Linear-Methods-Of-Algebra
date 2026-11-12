@@ -255,4 +255,42 @@ def run_lab(n):
     }
     blocks.append(chart)
 
+    # ==========================================
+    # ВИЗУАЛИЗАЦИЯ МАТРИЦ
+    # ==========================================
+    
+    # 1. Вывод исходных матриц A и B
+    # Ограничим вывод, если n слишком большое (например, > 15)
+    # Чтобы таблица не растянулась на весь экран
+    max_preview = 10
+    n_preview = min(n, max_preview)
+    
+    A_preview = np.round(A[:n_preview, :n_preview], 2)
+    B_preview = np.round(B[:n_preview, :n_preview], 2)
+    
+    blocks.append({
+        "type": "matrix",
+        "title": f"Матрицы A и B (фрагмент {n_preview}x{n_preview})",
+        "matrices": [
+            {"label": "A (трёхдиагональная)", "data": A_preview.tolist()},
+            {"label": "B (sin)", "data": B_preview.tolist()}
+        ]
+    })
+
+    # 2. Матрица ортогональности Q^T Q для метода Хаусхолдера
+    # Это докажет, что алгоритм работает корректно
+    Q_hh_preview = Q_hh[:n_preview, :n_preview]
+    Q_gs_preview = Q_gs[:n_preview, :n_preview]
+    
+    blocks.append({
+        "type": "matrix",
+        "title": f"Проверка ортогональности: Q^T Q (фрагмент {n_preview}x{n_preview})",
+        "matrices": [
+            {"label": "Q^T Q (Хаусхолдер)", "data": np.round(Q_hh_preview.T @ Q_hh_preview, 2).tolist(), "highlight": True},
+            {"label": "Q^T Q (Грамм-Шмидт)", "data": np.round(Q_gs_preview.T @ Q_gs_preview, 2).tolist()}
+        ]
+    })
+
+
+
     return {"ok": True, "blocks": blocks}
